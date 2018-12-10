@@ -1,11 +1,11 @@
 package com.howtographql.scala.sangria
 
 import akka.http.scaladsl.model.DateTime
-import com.howtographql.scala.sangria.models.{DateTimeCoerceViolation, Link}
+import com.howtographql.scala.sangria.models.{DateTimeCoerceViolation, Link, User}
 import sangria.ast.StringValue
 import sangria.execution.deferred.{DeferredResolver, Fetcher, HasId}
 import sangria.macros.derive._
-import sangria.schema._
+import sangria.schema.{Field, _}
 
 
 object GraphQLSchema {
@@ -23,31 +23,29 @@ object GraphQLSchema {
     }
   )
 
-  // 1
-  //  val LinkType = ObjectType[Unit, Link](
-  //    "Link",
-  //    fields[Unit, Link](
-  //      Field("id", IntType, resolve = _.value.id),
-  //      Field("url", StringType, resolve = _.value.url),
-  //      Field("description", StringType, resolve = _.value.description),
-  //      Field("createdAt", GraphQLDateTime, resolve = _.value.createdAt)
-  //    )
-  //  )
-
   val LinkType = deriveObjectType[Unit, Link](
     ReplaceField("createdAt", Field("createdAt", GraphQLDateTime, resolve = _.value.createdAt))
   )
-  implicit val linkHasId = HasId[Link, Int](_.id)
+
+  val UserType = deriveObjectType[Unit, User](
+    ReplaceField("createdAt", Field("createdAt", GraphQLDateTime, resolve = _.value.createdAt))
+  )
 
 
   val Id = Argument("id", IntType)
   val Ids = Argument("ids", ListInputType(IntType))
 
+  implicit val linkHasId = HasId[Link, Int](_.id)
   val linksFetcher = Fetcher(
     (ctx: MyContext, ids: Seq[Int]) => ctx.dao.getLinks(ids)
   )
-  val Resolver = DeferredResolver.fetchers(linksFetcher)
 
+  implicit val userHasId = HasId[User, Int](_.id)
+  val usersFetcher = Fetcher(
+    (ctx: MyContext, ids: Seq[Int]) => ctx.dao.getUsers(ids)
+  )
+
+  val Resolver = DeferredResolver.fetchers(linksFetcher, usersFetcher)
 
   // 2
   val QueryType = ObjectType(
@@ -65,9 +63,13 @@ object GraphQLSchema {
         ListType(LinkType),
         arguments = Ids :: Nil,
         resolve = c => linksFetcher.deferSeq(c.arg(Ids))
+      ),
 
+      Field("users",
+        ListType(UserType),
+        arguments = Ids :: Nil,
+        resolve = c => usersFetcher.deferSeq(c.arg(Ids))
       )
-
     )
   )
 
