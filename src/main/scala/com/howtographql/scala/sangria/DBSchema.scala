@@ -3,7 +3,7 @@ package com.howtographql.scala.sangria
 import java.sql.Timestamp
 
 import akka.http.scaladsl.model.DateTime
-import com.howtographql.scala.sangria.models.{Link, User}
+import com.howtographql.scala.sangria.models.{Link, User, Vote}
 import slick.ast.BaseTypedType
 import slick.jdbc.H2Profile.api._
 import slick.jdbc.JdbcType
@@ -47,9 +47,22 @@ object DBSchema {
     def * = (id, name, email, password, createdAt).mapTo[User]
   }
 
+  class VotesTable(tag: Tag) extends Table[Vote](tag, "VOTES") {
+    def id = column[Int]("ID", O.PrimaryKey, O.AutoInc)
+
+    def createdAt = column[DateTime]("CREATED_AT")
+
+    def userId = column[Int]("USER_ID")
+
+    def linkId = column[Int]("LINK_ID")
+
+    def * = (id, createdAt, userId, linkId).mapTo[Vote]
+  }
+
   //2
   val Links = TableQuery[LinksTable]
   val Users = TableQuery[UsersTable]
+  val Votes = TableQuery[VotesTable]
 
   /**
     * Load schema and populate sample data withing this Sequence od DBActions
@@ -66,6 +79,13 @@ object DBSchema {
     Users forceInsertAll Seq(
       User(1, "User A", "a@test.com", "pppppp", DateTime(2018, 12, 12)),
       User(2, "User B", "b@test.com", "pppppp", DateTime(2018, 12, 12))
+    ),
+
+    Votes.schema.create,
+    Votes forceInsertAll Seq(
+      Vote(1, DateTime(2018, 12, 14), 1, 2),
+      Vote(2, DateTime(2018, 12, 14), 2, 3),
+      Vote(3, DateTime(2018, 12, 14), 2, 1)
     )
 
   )

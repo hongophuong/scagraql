@@ -1,7 +1,7 @@
 package com.howtographql.scala.sangria
 
 import akka.http.scaladsl.model.DateTime
-import com.howtographql.scala.sangria.models.{DateTimeCoerceViolation, Link, User}
+import com.howtographql.scala.sangria.models.{DateTimeCoerceViolation, Link, User, Vote}
 import sangria.ast.StringValue
 import sangria.execution.deferred.{DeferredResolver, Fetcher, HasId}
 import sangria.macros.derive._
@@ -31,6 +31,10 @@ object GraphQLSchema {
     ReplaceField("createdAt", Field("createdAt", GraphQLDateTime, resolve = _.value.createdAt))
   )
 
+  val VoteType = deriveObjectType[Unit, Vote](
+    ReplaceField("createdAt", Field("createdAt", GraphQLDateTime, resolve = _.value.createdAt))
+  )
+
 
   val Id = Argument("id", IntType)
   val Ids = Argument("ids", ListInputType(IntType))
@@ -45,7 +49,12 @@ object GraphQLSchema {
     (ctx: MyContext, ids: Seq[Int]) => ctx.dao.getUsers(ids)
   )
 
-  val Resolver = DeferredResolver.fetchers(linksFetcher, usersFetcher)
+  implicit val voteHasId = HasId[Vote, Int](_.id)
+  val votesFetcher = Fetcher(
+    (ctx: MyContext, ids: Seq[Int]) => ctx.dao.getVotes(ids)
+  )
+
+  val Resolver = DeferredResolver.fetchers(linksFetcher, usersFetcher, votesFetcher)
 
   // 2
   val QueryType = ObjectType(
@@ -69,6 +78,12 @@ object GraphQLSchema {
         ListType(UserType),
         arguments = Ids :: Nil,
         resolve = c => usersFetcher.deferSeq(c.arg(Ids))
+      ),
+
+      Field("votes",
+        ListType(VoteType),
+        arguments = Ids :: Nil,
+        resolve = c => votesFetcher.deferSeq(c.arg(Ids))
       )
     )
   )
