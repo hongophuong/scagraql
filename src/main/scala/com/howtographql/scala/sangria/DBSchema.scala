@@ -28,9 +28,13 @@ object DBSchema {
 
     def description = column[String]("DESCRIPTION")
 
+    def postedBy = column[Int]("USER_ID")
+
+    def postedByFk = foreignKey("postedBy_FK", postedBy, Users)(_.id)
+
     def createdAt = column[DateTime]("CREATED_AT")
 
-    def * = (id, url, description, createdAt).mapTo[Link]
+    def * = (id, url, description, postedBy, createdAt).mapTo[Link]
   }
 
   class UsersTable(tag: Tag) extends Table[User](tag, "USERS") {
@@ -50,13 +54,17 @@ object DBSchema {
   class VotesTable(tag: Tag) extends Table[Vote](tag, "VOTES") {
     def id = column[Int]("ID", O.PrimaryKey, O.AutoInc)
 
-    def createdAt = column[DateTime]("CREATED_AT")
-
     def userId = column[Int]("USER_ID")
 
     def linkId = column[Int]("LINK_ID")
 
-    def * = (id, createdAt, userId, linkId).mapTo[Vote]
+    def userFk = foreignKey("user_FK", userId, Users)(_.id)
+
+    def linkFk = foreignKey("link_FK", linkId, Links)(_.id)
+
+    def createdAt = column[DateTime]("CREATED_AT")
+
+    def * = (id, userId, linkId, createdAt).mapTo[Vote]
   }
 
   //2
@@ -68,26 +76,27 @@ object DBSchema {
     * Load schema and populate sample data withing this Sequence od DBActions
     */
   val databaseSetup = DBIO.seq(
-    Links.schema.create,
-
-    Links forceInsertAll Seq(
-      Link(1, "http://howtographql.com", "Awesome community driven GraphQL tutorial", DateTime(2018, 12, 10)),
-      Link(2, "http://graphql.org", "Official GraphQL web page", DateTime(2018, 12, 11)),
-      Link(3, "https://facebook.github.io/graphql/", "GraphQL specification", DateTime(2017, 10, 1))),
-
     Users.schema.create,
+    Links.schema.create,
+    Votes.schema.create,
+
     Users forceInsertAll Seq(
-      User(1, "User A", "a@test.com", "pppppp", DateTime(2018, 12, 12)),
-      User(2, "User B", "b@test.com", "pppppp", DateTime(2018, 12, 12))
+      User(1, "mario", "mario@example.com", "s3cr3t"),
+      User(2, "Fred", "fred@flinstones.com", "wilmalove")
     ),
 
-    Votes.schema.create,
-    Votes forceInsertAll Seq(
-      Vote(1, DateTime(2018, 12, 14), 1, 2),
-      Vote(2, DateTime(2018, 12, 14), 2, 3),
-      Vote(3, DateTime(2018, 12, 14), 2, 1)
-    )
+    Links forceInsertAll Seq(
+      Link(1, "http://howtographql.com", "Awesome community driven GraphQL tutorial", 1, DateTime(2017, 9, 12)),
+      Link(2, "http://graphql.org", "Official GraphQL web page", 1, DateTime(2017, 10, 1)),
+      Link(3, "https://facebook.github.io/graphql/", "GraphQL specification", 2, DateTime(2017, 10, 2))
+    ),
 
+    Votes forceInsertAll Seq(
+      Vote(1, 1, 1),
+      Vote(2, 1, 2),
+      Vote(3, 1, 3),
+      Vote(4, 2, 2),
+    )
   )
 
 

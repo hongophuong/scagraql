@@ -1,10 +1,10 @@
 package com.howtographql.scala.sangria
 
 import akka.http.scaladsl.model.DateTime
-import com.howtographql.scala.sangria.models.{DateTimeCoerceViolation, Link, User, Vote}
+import com.howtographql.scala.sangria.models._
 import sangria.ast.StringValue
-import sangria.execution.deferred.{DeferredResolver, Fetcher, HasId}
-import sangria.macros.derive._
+import sangria.execution.deferred.{DeferredResolver, Fetcher, Relation, RelationIds}
+import sangria.macros.derive.{AddFields, _}
 import sangria.schema.{Field, _}
 
 
@@ -23,38 +23,57 @@ object GraphQLSchema {
     }
   )
 
-  val LinkType = deriveObjectType[Unit, Link](
-    ReplaceField("createdAt", Field("createdAt", GraphQLDateTime, resolve = _.value.createdAt))
+  val IdentifiableType = InterfaceType(
+    "Identifiable",
+    fields[Unit, Identifiable](
+      Field("id", IntType, resolve = _.value.id)
+    )
   )
 
-  val UserType = deriveObjectType[Unit, User](
-    ReplaceField("createdAt", Field("createdAt", GraphQLDateTime, resolve = _.value.createdAt))
+  lazy val LinkType: ObjectType[Unit, Link] = deriveObjectType[Unit, Link](
+    Interfaces(IdentifiableType),
+    ReplaceField("createdAt", Field("createdAt", GraphQLDateTime, resolve = _.value.createdAt)),
+    ReplaceField("postedBy", Field("postedBy", UserType, resolve = l => usersFetcher.defer(l.value.postedBy))),
+    AddFields(Field("votes", ListType(VoteType), resolve = l => votesFetcher.deferRelSeq(voteByLinkRel, l.value.id)))
   )
 
-  val VoteType = deriveObjectType[Unit, Vote](
-    ReplaceField("createdAt", Field("createdAt", GraphQLDateTime, resolve = _.value.createdAt))
+  lazy val UserType: ObjectType[Unit, User] = deriveObjectType[Unit, User](
+    Interfaces(IdentifiableType),
+    AddFields(Field("links", ListType(LinkType), resolve = u => linksFetcher.deferRelSeq(linkByUserRel, u.value.id))),
+    AddFields(Field("votes", ListType(VoteType), resolve = u => votesFetcher.deferRelSeq(voteByUserRel, u.value.id)))
+  )
+
+  lazy val VoteType: ObjectType[Unit, Vote] = deriveObjectType[Unit, Vote](
+    Interfaces(IdentifiableType),
+    ExcludeFields("userId"),
+    AddFields(Field("user", UserType, resolve = v => usersFetcher.defer(v.value.userId))),
+    ExcludeFields("linkId"),
+    AddFields(Field("link", LinkType, resolve = v => linksFetcher.defer(v.value.linkId)))
   )
 
 
   val Id = Argument("id", IntType)
   val Ids = Argument("ids", ListInputType(IntType))
 
-  implicit val linkHasId = HasId[Link, Int](_.id)
-  val linksFetcher = Fetcher(
-    (ctx: MyContext, ids: Seq[Int]) => ctx.dao.getLinks(ids)
+  val linkByUserRel: Relation[Link, Link, Int] = Relation[Link, Int]("byUser", l => Seq(l.postedBy))
+  val voteByUserRel: Relation[Vote, Vote, Int] = Relation[Vote, Int]("byUser", v => Seq(v.userId))
+  val voteByLinkRel: Relation[Vote, Vote, Int] = Relation[Vote, Int]("byLink", v => Seq(v.linkId))
+
+  val linksFetcher = Fetcher.rel(
+    (ctx: MyContext, ids: Seq[Int]) => ctx.dao.getLinks(ids),
+    (ctx: MyContext, ids: RelationIds[Link]) => ctx.dao.getLinksByUserIds(ids(linkByUserRel))
   )
 
-  implicit val userHasId = HasId[User, Int](_.id)
   val usersFetcher = Fetcher(
     (ctx: MyContext, ids: Seq[Int]) => ctx.dao.getUsers(ids)
   )
 
-  implicit val voteHasId = HasId[Vote, Int](_.id)
-  val votesFetcher = Fetcher(
-    (ctx: MyContext, ids: Seq[Int]) => ctx.dao.getVotes(ids)
+  val votesFetcher = Fetcher.rel(
+    (ctx: MyContext, ids: Seq[Int]) => ctx.dao.getVotes(ids),
+    (ctx: MyContext, ids: RelationIds[Vote]) => ctx.dao.getVotesByRelationIds(ids)
   )
 
-  val Resolver = DeferredResolver.fetchers(linksFetcher, usersFetcher, votesFetcher)
+  val Resolver: DeferredResolver[MyContext] = DeferredResolver.fetchers(linksFetcher, usersFetcher, votesFetcher)
 
   // 2
   val QueryType = ObjectType(
@@ -65,7 +84,7 @@ object GraphQLSchema {
       Field("link",
         OptionType(LinkType),
         arguments = Id :: Nil,
-        resolve = c => linksFetcher.defer(c.arg(Id))
+        resolve = c => linksFetcher.deferOpt(c.arg(Id))
       ),
 
       Field("links",
