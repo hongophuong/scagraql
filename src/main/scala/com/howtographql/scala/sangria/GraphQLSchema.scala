@@ -5,7 +5,10 @@ import com.howtographql.scala.sangria.models._
 import sangria.ast.StringValue
 import sangria.execution.deferred.{DeferredResolver, Fetcher, Relation, RelationIds}
 import sangria.macros.derive.{AddFields, _}
+import sangria.marshalling.sprayJson._
 import sangria.schema.{Field, _}
+import spray.json.DefaultJsonProtocol._
+import spray.json.RootJsonFormat
 
 
 object GraphQLSchema {
@@ -51,6 +54,15 @@ object GraphQLSchema {
     AddFields(Field("link", LinkType, resolve = v => linksFetcher.defer(v.value.linkId)))
   )
 
+  //Input type
+  implicit val AuthProviderEmailInputType: InputObjectType[AuthProviderEmail] = deriveInputObjectType[AuthProviderEmail](InputObjectTypeName("AUTH_PROVIDER_EMAIL"))
+
+  lazy val AuthProviderSignupDataInputType: InputObjectType[AuthProviderSignupData] = deriveInputObjectType[AuthProviderSignupData]()
+
+  implicit val authProviderEmailFormat: RootJsonFormat[AuthProviderEmail] = jsonFormat2(AuthProviderEmail)
+
+  implicit val authProviderSignupDataFormat: RootJsonFormat[AuthProviderSignupData] = jsonFormat1(AuthProviderSignupData)
+
 
   val Id = Argument("id", IntType)
   val Ids = Argument("ids", ListInputType(IntType))
@@ -59,7 +71,7 @@ object GraphQLSchema {
   val voteByUserRel: Relation[Vote, Vote, Int] = Relation[Vote, Int]("byUser", v => Seq(v.userId))
   val voteByLinkRel: Relation[Vote, Vote, Int] = Relation[Vote, Int]("byLink", v => Seq(v.linkId))
 
-  val linksFetcher = Fetcher.rel(
+  val linksFetcher: Fetcher[MyContext, Link, Link, Int] = Fetcher.rel(
     (ctx: MyContext, ids: Seq[Int]) => ctx.dao.getLinks(ids),
     (ctx: MyContext, ids: RelationIds[Link]) => ctx.dao.getLinksByUserIds(ids(linkByUserRel))
   )
@@ -68,7 +80,7 @@ object GraphQLSchema {
     (ctx: MyContext, ids: Seq[Int]) => ctx.dao.getUsers(ids)
   )
 
-  val votesFetcher = Fetcher.rel(
+  val votesFetcher: Fetcher[MyContext, Vote, Vote, Int] = Fetcher.rel(
     (ctx: MyContext, ids: Seq[Int]) => ctx.dao.getVotes(ids),
     (ctx: MyContext, ids: RelationIds[Vote]) => ctx.dao.getVotesByRelationIds(ids)
   )
@@ -107,6 +119,36 @@ object GraphQLSchema {
     )
   )
 
+  val NameArg = Argument("name", StringType)
+  val AuthProviderArg = Argument("authProvider", AuthProviderSignupDataInputType)
+  val UrlArg = Argument("url", StringType)
+  val DescArg = Argument("description", StringType)
+  val PostedByArg = Argument("postedById", IntType)
+  val UserIdArg = Argument("userId", IntType)
+  val LinkIdArg = Argument("linkId", IntType)
+
+  val Mutation = ObjectType(
+    "Mutation",
+    fields[MyContext, Unit](
+      Field("createUser",
+        UserType,
+        arguments = NameArg :: AuthProviderArg :: Nil,
+        resolve = c => c.ctx.dao.createUser(c.arg(NameArg), c.arg(AuthProviderArg))
+      ),
+
+      Field("createLink",
+        LinkType,
+        arguments = UrlArg :: DescArg :: PostedByArg :: Nil,
+        resolve = c => c.ctx.dao.createLink(c.arg(UrlArg), c.arg(DescArg), c.arg(PostedByArg))
+      ),
+      Field("createVote",
+        VoteType,
+        arguments = UserIdArg :: LinkIdArg :: Nil,
+        resolve = c => c.ctx.dao.createVote(c.arg(UserIdArg), c.arg(LinkIdArg))
+      )
+    )
+  )
+
   // 3
-  val SchemaDefinition = Schema(QueryType)
+  val SchemaDefinition = Schema(QueryType, Some(Mutation))
 }
