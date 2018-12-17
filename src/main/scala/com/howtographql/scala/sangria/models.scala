@@ -1,6 +1,7 @@
 package com.howtographql.scala.sangria
 
 import akka.http.scaladsl.model.DateTime
+import sangria.execution.FieldTag
 import sangria.execution.deferred.HasId
 import sangria.validation.Violation
 
@@ -19,6 +20,12 @@ package object models {
   case object DateTimeCoerceViolation extends Violation {
     override def errorMessage: String = "Error during parsing DateTime"
   }
+
+  case class AuthenticationException(message: String) extends Exception(message)
+
+  case class AuthorizationException(message: String) extends Exception(message)
+
+  case object Authorized extends FieldTag
 
   trait Identifiable {
     val id: Int

@@ -4,6 +4,7 @@ import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.StatusCodes._
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
+import com.howtographql.scala.sangria.models.{AuthenticationException, AuthorizationException}
 import sangria.ast.Document
 import sangria.execution._
 import sangria.marshalling.sprayJson._
@@ -49,6 +50,11 @@ object GraphQLServer {
 
   }
 
+  val ErrorHandler = ExceptionHandler {
+    case (_, AuthenticationException(message)) => HandledException(message)
+    case (_, AuthorizationException(message)) => HandledException(message)
+  }
+
   private def executeGraphQLQuery(query: Document, operation: Option[String], vars: JsObject)(implicit ec: ExecutionContext) = {
     // 9
     Executor.execute(
@@ -57,7 +63,9 @@ object GraphQLServer {
       MyContext(dao), // 12
       variables = vars, // 13
       operationName = operation, // 14
-      deferredResolver = GraphQLSchema.Resolver
+      deferredResolver = GraphQLSchema.Resolver,
+      exceptionHandler = ErrorHandler,
+      middleware = AuthMiddleware :: Nil
     ).map(OK -> _)
       .recover {
         case error: QueryAnalysisError => BadRequest -> error.resolveError

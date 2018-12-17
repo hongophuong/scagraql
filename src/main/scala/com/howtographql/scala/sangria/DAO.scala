@@ -8,6 +8,11 @@ import slick.jdbc.H2Profile.api._
 import scala.concurrent.Future
 
 class DAO(db: Database) {
+
+  def authenticate(email: String, password: String): Future[Option[User]] = db.run {
+    Users.filter(u => u.email === email && u.password === password).result.headOption
+  }
+
   def createVote(userId: Int, linkId: Int): Future[Vote] = {
     val insertAndReturnVoteQuery = (Votes returning Votes.map(_.id)) into {
       (vote, id) => vote.copy(id = id)
